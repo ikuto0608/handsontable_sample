@@ -20,10 +20,14 @@
   <body>
     <div class="container">
       <h1>TEST</h1>
+      <div id="alerts"></div>
+      <button id="culculate-button" type="button" class="btn btn-primary pull-right">Calculate</button>
+
       <ul class="nav nav-tabs">
         <li class="active"><a id="tab1" data-toggle="tab" href="#tab1-content">Tab 1</a></li>
         <li><a id="tab2" data-toggle="tab" href="#tab2-content">Tab 2</a></li>
         <li><a id="tab3" data-toggle="tab" href="#tab3-content">Tab 3</a></li>
+        <li><a id="tab4" data-toggle="tab" href="#tab4-content">Tab 4</a></li>
       </ul>
 
       <div class="tab-content">
@@ -33,12 +37,15 @@
         </div>
         <div id="tab3-content" class="tab-pane fade">
         </div>
+        <div id="tab4-content" class="tab-pane fade">
+        </div>
       </div>
     </div>
 
     <script type="text/javascript">
       var firstTable;
       var secondTable;
+      var thirdTable;
 
       function importFirstTable() {
         if (typeof firstTable !== 'undefined') {
@@ -46,22 +53,12 @@
         }
 
         $.ajax({
-          url: 'http://localhost:8888/handsontable/us-500.csv',
+          url: 'http://localhost:8888/handsontable/sample.csv',
           dataType: 'text',
         }).done(createTable);
 
         function createTable(data) {
           dataArray = Papa.parse(data).data;
-
-/*
-          data = data.replace(/(")/g,'');
-          data = data.replace(/(\r\n|\r|\n)/g, '\n');
-          var dataArray = data.split('\n');
-
-          dataArray = dataArray.map(data => {
-            return data.split(',');
-          });
-*/
           var headerArray = dataArray.splice(0, 1)[0];
           var container = document.getElementById('tab1-content');
           firstTable = new Handsontable(container, {
@@ -84,42 +81,80 @@
         }
 
         $.ajax({
-          url: 'http://localhost:8888/handsontable/us-99.csv',
+          url: 'http://localhost:8888/handsontable/sample2.csv',
           dataType: 'text',
         }).done(createTable);
 
         function createTable(data) {
           dataArray = Papa.parse(data).data;
-
-/*
-          data = data.replace(/(")/g,'');
-          data = data.replace(/(\r\n|\r|\n)/g, '\n');
-          var dataArray = data.split('\n');
-
-          dataArray = dataArray.map(data => {
-            return data.split(',');
-          });
-*/
-
-          var headerArray = dataArray.splice(0, 1)[0];
           var container = document.getElementById('tab2-content');
           secondTable = new Handsontable(container, {
             data: dataArray,
-            minSpareRows: 1,
-            startRows: 1,
-            startCols: 1,
+            maxColumns: 10,
+            minRows: 50,
+            minColumns: 10,
             rowHeaders: true,
-            colHeaders: headerArray,
+            colHeaders: true,
             width: '100%',
             height: $(window).height() - $("#tab1-content").offset().top,
-            columnSorting: true
+            columnSorting: true,
+            search: true
           });
         }
+      }
+
+      function importThirdTable() {
+        if (typeof thirdTable !== 'undefined') {
+          return;
+        }
+
+        $.ajax({
+          url: 'http://localhost:8888/handsontable/sample3.csv',
+          dataType: 'text',
+        }).done(createTable);
+
+        function createTable(data) {
+          dataArray = Papa.parse(data).data;
+          var container = document.getElementById('tab3-content');
+          thirdTable = new Handsontable(container, {
+            data: dataArray,
+            maxColumns: 10,
+            minRows: 10,
+            minColumns: 10,
+            rowHeaders: true,
+            colHeaders: true,
+            width: '100%',
+            height: $(window).height() - $("#tab1-content").offset().top,
+            columnSorting: true,
+            search: true
+          });
+        }
+      }
+
+      function initializeFourTable() {
+        if (typeof fourTable !== 'undefined') {
+          return;
+        }
+
+        var container = document.getElementById('tab4-content');
+        fourTable = new Handsontable(container, {
+          maxColumns: 10,
+          minRows: 10,
+          minColumns: 10,
+          rowHeaders: true,
+          colHeaders: true,
+          width: '100%',
+          height: $(window).height() - $("#tab1-content").offset().top,
+          columnSorting: true,
+          search: true
+        });
       }
 
       $(document).ready(() => {
         importFirstTable();
         importSecondTable();
+        importThirdTable();
+        initializeFourTable();
       });
 
       $('a#tab1').on('shown.bs.tab', (e) => {
@@ -129,6 +164,71 @@
       $('a#tab2').on('shown.bs.tab', (e) => {
         secondTable.render();
       });
+
+      $('a#tab3').on('shown.bs.tab', (e) => {
+        thirdTable.render();
+      });
+
+      $('a#tab4').on('shown.bs.tab', (e) => {
+        fourTable.render();
+      });
+
+      $('#culculate-button').click(() => {
+        if (secondTable.isEmptyRow(0) || thirdTable.isEmptyRow(0)) {
+          return addAlert("Some sheets are empty!");
+        }
+
+        calculatePayroll();
+      });
+
+      function addAlert(message) {
+        $('#alerts').append(
+          '<div class="alert alert-danger">' +
+          '<button type="button" class="close" data-dismiss="alert">' +
+          '&times;</button>' + message + '</div>');
+      }
+
+      function calculatePayroll() {
+        var isValid = true;
+        var keyMap = createKeyMap();
+        var firstTableHeaders = firstTable.getColHeader();
+
+        var emptyData = firstTable.getSourceData();
+        var calculatedData = emptyData.map(row => {
+          var newRow = row.slice(0); // Duplicate row array to not allow to change original row
+
+          var userID = newRow[0];
+          secondTable.search.query(userID).forEach(cellObject => {
+            if (cellObject.col == 0) {
+              var record = secondTable.getDataAtRow(cellObject.row);
+              var keyName = keyMap.get(record[3]);
+              var indexOfKey = firstTableHeaders.indexOf(keyName);
+
+              if (indexOfKey == -1) {
+                addAlert("There is missing key [ " + record[3] + " ] (" + (cellObject.col + 1) + ", " + (cellObject.row + 1) + ")!");
+                isValid =  false;
+              }
+
+              newRow[indexOfKey] = parseInt(newRow[indexOfKey]) + parseInt(record[4]);
+            }
+          });
+
+          return newRow;
+        });
+
+        if (isValid) {
+          fourTable.loadData(calculatedData);
+        }
+      }
+
+      function createKeyMap() {
+        var keyMap = new Map();
+        thirdTable.getSourceData().forEach(row => {
+          keyMap.set(row[1], row[0]);
+        });
+
+        return keyMap;
+      }
     </script>
   </body>
 </html>
